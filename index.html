@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#162b27">
+  <title>MTG Print Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&family=Noto+Serif+SC:wght@700;800&family=Playfair+Display:wght@600;700&display=swap">
+  <link rel="stylesheet" href="./style.css">
+  <script src="./app.js" type="module"></script>
+</head>
+<body>
+  <header class="shell topbar">
+    <a class="brand" href="/" aria-label="MTG Print Studio"><span class="brand-mark" aria-hidden="true">✦</span><span>MTG<span class="brand-sub"> PRINT STUDIO</span></span></a>
+    <div class="locale" role="group" data-aria="language">
+      <button type="button" id="zh" lang="zh-Hans">简中</button>
+      <button type="button" id="en" lang="en">EN</button>
+    </div>
+  </header>
+  <main class="shell">
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow"><span></span><span data-label="eyebrow"></span></div>
+        <h1 data-label="title"></h1>
+        <p data-label="subtitle"></p>
+        <div class="specs"><span>A4 / 210 × 297 mm</span><span>63 × 88 mm</span><span data-label="nine"></span></div>
+      </div>
+      <div class="blueprint" aria-hidden="true">
+        <div class="orbit"></div><div class="plate plate-rear"></div><div class="plate plate-mid"></div>
+        <div class="plate plate-front"><span>✦</span><b>63 × 88</b><small>MILLIMETRES</small></div>
+        <span class="register top-left">+</span><span class="register bottom-right">+</span>
+      </div>
+    </section>
+
+    <div class="workflow">
+      <section class="panel">
+        <div class="step"><span>01</span><h2 data-label="import"></h2></div>
+        <p class="hint" data-label="importHelp"></p>
+        <label for="deck" data-label="deckLabel"></label>
+        <textarea id="deck" spellcheck="false" data-placeholder="placeholder"></textarea>
+        <div class="row utilities">
+          <label class="button ghost" for="file" data-label="upload"></label>
+          <input id="file" type="file" accept=".txt,.csv,.tsv,.dec,.dck,.mwdeck,.mtga,text/plain,text/csv,text/tab-separated-values" class="visually-hidden">
+          <button id="sample" class="text-button" data-label="example"></button>
+        </div>
+        <button id="resolve" class="button primary wide" data-label="resolve"></button>
+        <p id="notice" class="notice" role="status"></p>
+      </section>
+
+      <section class="panel review">
+        <div class="step"><span>02</span><h2 data-label="review"></h2><span id="count" class="pill"></span></div>
+        <p class="hint" data-label="reviewHelp"></p>
+        <div id="cards" class="cards"></div>
+      </section>
+    </div>
+
+    <section class="panel export">
+      <div>
+        <div class="step"><span>03</span><h2 data-label="export"></h2></div>
+        <p id="summary" class="hint"></p>
+        <p class="hint" data-label="actualSize"></p>
+      </div>
+      <div class="export-actions">
+        <label class="check"><input id="backs" type="checkbox" checked> <span data-label="backs"></span></label>
+        <button id="pdf" class="button primary" disabled data-label="download"></button>
+      </div>
+      <p id="exportNotice" class="notice" role="status"></p>
+    </section>
+  </main>
+  <footer class="shell footer"><span>MTG PRINT STUDIO</span><span data-label="credits"></span></footer>
+
+  <dialog id="picker">
+    <div class="picker-header">
+      <div><div class="eyebrow" data-label="gallery"></div><h2 id="pickerTitle"></h2></div>
+      <button type="button" id="close" class="button ghost close" data-aria="close">×</button>
+    </div>
+    <div class="tabs">
+      <button type="button" id="official" class="button ghost" data-label="official"></button>
+      <button type="button" id="community" class="button ghost" data-label="community"></button>
+    </div>
+    <p id="galleryStatus" class="hint" role="status"></p>
+    <div id="webUpload" hidden>
+      <div class="row">
+        <a class="button ghost" href="https://mpcfill.com/" target="_blank" rel="noopener noreferrer" data-label="openMpc"></a>
+        <label class="button ghost" for="cardFile" data-label="uploadImage"></label>
+        <input id="cardFile" class="visually-hidden" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg">
+        <label class="check"><input id="trimImage" type="checkbox" checked> <span data-label="trimImage"></span></label>
+      </div>
+    </div>
+    <div id="choices" class="choices"></div>
+  </dialog>
+</body>
+</html>
