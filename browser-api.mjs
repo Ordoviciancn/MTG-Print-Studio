@@ -113,7 +113,7 @@ export async function browserApi(path, payload) {
   if (path === "prints") return printings(payload);
   if (path === "pdf") {
     const { makeBrowserPdf } = await import("./browser-pdf.mjs");
-    return makeBrowserPdf(payload.rows);
+    return makeBrowserPdf(payload.rows, payload.size);
   }
   throw new Error("This source is available in the desktop edition");
 }

@@ -13,7 +13,10 @@ from print_pdf import crop_card, make_pdf
 
 ROOT = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"),
-          "/style.css": ("style.css", "text/css"), "/labels.js": ("labels.js", "text/javascript")}
+          "/style.css": ("style.css", "text/css"), "/labels.js": ("labels.js", "text/javascript"),
+          "/card-sizes.mjs": ("card-sizes.mjs", "text/javascript"),
+          "/browser-pdf.mjs": ("browser-pdf.mjs", "text/javascript"),
+          "/vendor/pdf-lib.min.js": ("vendor/pdf-lib.min.js", "text/javascript")}
 IMAGE_WORKERS = 4
 
 
@@ -93,7 +96,8 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/api/community":
                 self.send_json(200, community_cards(body["name"], body["set"], body["number"]))
             elif self.path == "/api/pdf":
-                self.send(200, make_pdf(pdf_items(body)), "application/pdf", "mtg-a4.pdf")
+                self.send(200, make_pdf(pdf_items(body), body.get("size", "standard")),
+                          "application/pdf", "mtg-a4.pdf")
             else:
                 self.send_error(404)
         except SourceError as error:

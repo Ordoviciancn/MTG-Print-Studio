@@ -6,8 +6,7 @@ MM = 72 / 25.4
 PAGE_WIDTH, PAGE_HEIGHT = 210, 297
 CARD_WIDTH, CARD_HEIGHT = 63, 88
 GAP = 2
-LEFT = (PAGE_WIDTH - 3 * CARD_WIDTH - 2 * GAP) / 2
-BOTTOM = (PAGE_HEIGHT - 3 * CARD_HEIGHT - 2 * GAP) / 2
+CARD_SIZES = {"standard": (CARD_WIDTH, CARD_HEIGHT), "japanese": (59, 86)}
 
 
 def crop_card(image, ppi):
@@ -25,26 +24,29 @@ def coords(*values):
     return " ".join(f"{value * MM:.6f}" for value in values)
 
 
-def marks(slots):
+def marks(slots, width, height, left, bottom):
     # Short, separated marks keep ink out of each card's trim rectangle.
     commands = ["0.45 G 0.28 w"]
-    x_edges = {x + dx for x, _ in slots for dx in (0, CARD_WIDTH)}
-    y_edges = {y + dy for _, y in slots for dy in (0, CARD_HEIGHT)}
+    x_edges = {x + dx for x, _ in slots for dx in (0, width)}
+    y_edges = {y + dy for _, y in slots for dy in (0, height)}
     for x in sorted(x_edges):
-        for y, direction in [(PAGE_HEIGHT - BOTTOM, 1), (min(y for _, y in slots), -1)]:
+        for y, direction in [(PAGE_HEIGHT - bottom, 1), (min(y for _, y in slots), -1)]:
             commands.append(f"{coords(x, y + direction)} m {coords(x, y + 4 * direction)} l S")
     for y in sorted(y_edges):
-        right = max(x for x, _ in slots) + CARD_WIDTH
-        commands.append(f"{coords(LEFT - 4, y)} m {coords(LEFT - 1, y)} l S")
+        right = max(x for x, _ in slots) + width
+        commands.append(f"{coords(left - 4, y)} m {coords(left - 1, y)} l S")
         commands.append(f"{coords(right + 1, y)} m {coords(right + 4, y)} l S")
-    commands += ["0 G 0.5 w", f"{coords(LEFT, 7)} m {coords(LEFT + 50, 7)} l S",
-                 f"{coords(LEFT, 6)} m {coords(LEFT, 8)} l S",
-                 f"{coords(LEFT + 50, 6)} m {coords(LEFT + 50, 8)} l S",
-                 f"BT /F1 7 Tf {coords(LEFT + 53, 6)} Td (50 mm / 100%) Tj ET"]
+    commands += ["0 G 0.5 w", f"{coords(left, 7)} m {coords(left + 50, 7)} l S",
+                 f"{coords(left, 6)} m {coords(left, 8)} l S",
+                 f"{coords(left + 50, 6)} m {coords(left + 50, 8)} l S",
+                 f"BT /F1 7 Tf {coords(left + 53, 6)} Td (50 mm / 100%) Tj ET"]
     return "\n".join(commands)
 
 
-def make_pdf(items):
+def make_pdf(items, size="standard"):
+    width, height = CARD_SIZES[size]
+    left = (PAGE_WIDTH - 3 * width - 2 * GAP) / 2
+    bottom = (PAGE_HEIGHT - 3 * height - 2 * GAP) / 2
     objects = [b"", b"", b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
     images = {}
     cards = []
@@ -77,11 +79,11 @@ def make_pdf(items):
         slots, operators = [], []
         page_cards = cards[start:start + 9]
         for index, image_id in enumerate(page_cards):
-            x = LEFT + (index % 3) * (CARD_WIDTH + GAP)
-            y = PAGE_HEIGHT - BOTTOM - CARD_HEIGHT - (index // 3) * (CARD_HEIGHT + GAP)
+            x = left + (index % 3) * (width + GAP)
+            y = PAGE_HEIGHT - bottom - height - (index // 3) * (height + GAP)
             slots.append((x, y))
-            operators.append(f"q {coords(CARD_WIDTH)} 0 0 {coords(CARD_HEIGHT, x, y)} cm /I{image_id} Do Q")
-        content = stream(("\n".join(operators) + "\n" + marks(slots)).encode())
+            operators.append(f"q {coords(width)} 0 0 {coords(height, x, y)} cm /I{image_id} Do Q")
+        content = stream(("\n".join(operators) + "\n" + marks(slots, width, height, left, bottom)).encode())
         resources = " ".join(f"/I{i} {i} 0 R" for i in sorted(set(page_cards)))
         pages.append(add(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {coords(PAGE_WIDTH, PAGE_HEIGHT)}] "
                          f"/Resources << /XObject << {resources} >> /Font << /F1 3 0 R >> >> "

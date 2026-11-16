@@ -1,8 +1,11 @@
 import { labels } from "./labels.js";
+import { cardPresets, cardSizes } from "./card-sizes.mjs";
 
 const get = (id) => document.getElementById(id);
 const deck = get("deck");
 const picker = get("picker");
+const sizeSelect = get("cardSize");
+const imageLimit = 500;
 const webEdition = location.hostname !== "127.0.0.1";
 const messages = {};
 let language = localStorage.getItem("mtg-print-language") === "en" ? "en" : "zh";
@@ -10,6 +13,7 @@ let rows = [];
 let resolvedText = null;
 let importing = false;
 let exporting = false;
+let imageJob = false;
 let activeRow = null;
 let gallery = { token: 0, tab: "official", status: "", items: [] };
 
@@ -25,7 +29,8 @@ function message(id, key, values = {}, detail = "") {
 function renderMessage(id) {
   const { key, values, detail } = messages[id];
   get(id).textContent = key ? [t(key, values), detail].filter(Boolean).join(" ") : "";
-  get(id).dataset.error = String(Boolean(detail) || ["fileError", "importError", "pdfError"].includes(key));
+  get(id).dataset.error = String(Boolean(detail) ||
+    ["fileError", "importError", "pdfError", "imagesLimit", "importImagesError"].includes(key));
 }
 
 function node(tag, className, value) {
@@ -64,9 +69,21 @@ function chooseLanguage(value) {
   }
   for (const key of ["zh", "en"]) get(key).setAttribute("aria-pressed", String(value === key));
   for (const id of Object.keys(messages)) renderMessage(id);
+  const preset = sizeSelect.value || "mtg";
+  sizeSelect.replaceChildren(...Object.keys(cardPresets).map(key => {
+    const option = node("option", "", t("size_" + key) + " · " + sizeText(key) + " mm");
+    option.value = key;
+    return option;
+  }));
+  sizeSelect.value = preset;
   renderCards();
   renderSummary();
   if (picker.open) renderGallery();
+}
+
+function sizeText(preset) {
+  const { width, height } = cardSizes[cardPresets[preset]];
+  return width + " × " + height;
 }
 
 async function api(path, payload) {
@@ -104,6 +121,12 @@ function renderCards() {
     const info = node("div", "card-info");
     info.append(node("b", "", row.quantity + " × " + row.name));
     const details = selected ? description(selected) : t("missing");
+    if (imageJob) {
+      info.append(node("small", "", details));
+      item.append(info);
+      container.append(item);
+      continue;
+    }
     info.append(node("small", "", t(row.section) + " · " + details));
     const button = node("button", "button ghost", t("choose"));
     button.type = "button";
@@ -124,6 +147,12 @@ function description(card) {
 }
 
 function renderSummary() {
+  const dimensions = sizeText(sizeSelect.value);
+  get("sizeSpec").textContent = dimensions + " mm";
+  get("sizePlate").textContent = dimensions;
+  sizeSelect.disabled = exporting;
+  get("importImages").disabled = importing || exporting;
+  get("backs").disabled = imageJob || exporting;
   const stale = resolvedText !== null && resolvedText !== deck.value;
   const missing = rows.filter(row => !row.selected).length;
   const reverse = get("backs").checked;
@@ -146,6 +175,8 @@ async function resolveDeck() {
   message("exportNotice", "");
   try {
     const result = await api("resolve", { deck: input });
+    imageJob = false;
+    message("imageNotice", "");
     resolvedText = input;
     for (const row of rows) releaseUpload(row);
     rows = result.map(row => ({ ...row, official: row.card, selected: row.card }));
@@ -157,6 +188,56 @@ async function resolveDeck() {
     renderCards();
   } catch (error) {
     message("notice", "importError", {}, error.message);
+  } finally {
+    importing = false;
+    renderSummary();
+  }
+}
+
+async function validateImage(file) {
+  if (!["image/png", "image/jpeg"].includes(file.type) || file.size > 30_000_000) throw new Error();
+  const image = await createImageBitmap(file);
+  const pixels = image.width * image.height;
+  image.close();
+  if (pixels > 30_000_000) throw new Error();
+}
+
+async function importImages(event) {
+  const files = [...event.target.files];
+  event.target.value = "";
+  if (!files.length || importing || exporting) return;
+  if (files.length > imageLimit) {
+    message("imageNotice", "imagesLimit", { n: imageLimit });
+    return;
+  }
+  importing = true;
+  message("imageNotice", "");
+  renderSummary();
+  try {
+    const failed = [];
+    for (const file of files) {
+      try {
+        await validateImage(file);
+      } catch {
+        failed.push(file.name);
+      }
+    }
+    if (failed.length) {
+      message("imageNotice", "importImagesError", {}, failed.join(", "));
+      return;
+    }
+    for (const row of rows) releaseUpload(row);
+    rows = files.map(file => {
+      const url = URL.createObjectURL(file);
+      return { name: file.name, quantity: 1, selected: { name: file.name,
+        source: "upload", faces: [{ full: url, thumb: url }] } };
+    });
+    imageJob = true;
+    resolvedText = null;
+    message("notice", "");
+    message("exportNotice", "");
+    message("imageNotice", "imagesImported", { n: rows.length });
+    renderCards();
   } finally {
     importing = false;
     renderSummary();
@@ -249,11 +330,15 @@ async function exportPdf() {
         trim: face.trim,
       })),
     }));
-    const file = await api("pdf", { rows: items });
+    const preset = sizeSelect.value;
+    const size = cardPresets[preset];
+    const file = imageJob
+      ? await (await import("./browser-pdf.mjs")).makeBrowserPdf(items, size, true)
+      : await api("pdf", { rows: items, size });
     const url = URL.createObjectURL(file);
     const link = node("a");
     link.href = url;
-    link.download = "mtg-a4.pdf";
+    link.download = preset + "-a4.pdf";
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
     message("exportNotice", "pdfReady");
@@ -269,6 +354,12 @@ get("zh").addEventListener("click", () => chooseLanguage("zh"));
 get("en").addEventListener("click", () => chooseLanguage("en"));
 get("resolve").addEventListener("click", resolveDeck);
 get("backs").addEventListener("change", renderSummary);
+sizeSelect.addEventListener("change", () => {
+  message("exportNotice", "");
+  renderSummary();
+});
+get("importImages").addEventListener("click", () => get("imageFiles").click());
+get("imageFiles").addEventListener("change", importImages);
 get("pdf").addEventListener("click", exportPdf);
 get("close").addEventListener("click", () => picker.close());
 get("official").addEventListener("click", () => loadGallery("official"));
@@ -281,11 +372,7 @@ get("cardFile").addEventListener("change", async (event) => {
   event.target.value = "";
   if (!file) return;
   try {
-    if (!["image/png", "image/jpeg"].includes(file.type) || file.size > 30_000_000) throw new Error();
-    const image = await createImageBitmap(file);
-    const pixels = image.width * image.height;
-    image.close();
-    if (pixels > 30_000_000) throw new Error();
+    await validateImage(file);
     if (!picker.open || token !== gallery.token) return;
     const full = URL.createObjectURL(file);
     selectImage(row, { name: row.name, source: "upload", faces: [{ full, thumb: full, trim }] });

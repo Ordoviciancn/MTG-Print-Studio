@@ -1,9 +1,7 @@
+import { cardSizes } from "./card-sizes.mjs";
+
 const mm = value => value * 72 / 25.4;
-const width = 63;
-const height = 88;
 const gap = 2;
-const left = (210 - 3 * width - 2 * gap) / 2;
-const bottom = (297 - 3 * height - 2 * gap) / 2;
 let library;
 
 function pdfLibrary() {
@@ -37,6 +35,7 @@ async function download(face) {
 async function trimBleed(blob) {
   const image = await createImageBitmap(blob);
   try {
+    const { width, height } = cardSizes.standard;
     const bleed = 3.175;
     const scale = Math.min(image.width / (width + 2 * bleed), image.height / (height + 2 * bleed));
     const canvas = document.createElement("canvas");
@@ -52,7 +51,7 @@ async function trimBleed(blob) {
     image.close();
   }
 }
-function marks(page, slots, font, rgb) {
+function marks(page, slots, font, rgb, { width, height, left, bottom }) {
   const line = (x1, y1, x2, y2, dark = false) => page.drawLine({
     start: { x: mm(x1), y: mm(y1) }, end: { x: mm(x2), y: mm(y2) },
     color: dark ? rgb(0, 0, 0) : rgb(.45, .45, .45), thickness: dark ? .5 : .28,
@@ -75,8 +74,31 @@ function marks(page, slots, font, rgb) {
   page.drawText("50 mm / 100%", { x: mm(left + 53), y: mm(6), size: 7, font });
 }
 
-export async function makeBrowserPdf(rows) {
-  const { PDFDocument, PrintScaling, StandardFonts, rgb } = await pdfLibrary();
+function drawCard(page, image, x, y, width, height, rotate, fit) {
+  if (!fit) {
+    page.drawImage(image, { x: mm(x), y: mm(y), width: mm(width), height: mm(height) });
+    return;
+  }
+  const sideways = image.width > image.height;
+  const sourceWidth = sideways ? image.height : image.width;
+  const sourceHeight = sideways ? image.width : image.height;
+  const scale = Math.min(width / sourceWidth, height / sourceHeight);
+  const imageWidth = sourceWidth * scale;
+  const imageHeight = sourceHeight * scale;
+  const left = x + (width - imageWidth) / 2;
+  const bottom = y + (height - imageHeight) / 2;
+  page.drawImage(image, sideways
+    ? { x: mm(left + imageWidth), y: mm(bottom), width: mm(imageHeight),
+      height: mm(imageWidth), rotate: rotate(90) }
+    : { x: mm(left), y: mm(bottom), width: mm(imageWidth), height: mm(imageHeight) });
+}
+
+export async function makeBrowserPdf(rows, size = "standard", fitImages = false) {
+  if (!Object.hasOwn(cardSizes, size)) throw new Error("Unknown card size");
+  const { width, height } = cardSizes[size];
+  const left = (210 - 3 * width - 2 * gap) / 2;
+  const bottom = (297 - 3 * height - 2 * gap) / 2;
+  const { PDFDocument, PrintScaling, StandardFonts, rgb, degrees } = await pdfLibrary();
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   pdf.catalog.getOrCreateViewerPreferences().setPrintScaling(PrintScaling.None);
@@ -104,10 +126,10 @@ export async function makeBrowserPdf(rows) {
     const slots = faces.slice(start, start + 9).map((url, index) => {
       const x = left + (index % 3) * (width + gap);
       const y = 297 - bottom - height - Math.floor(index / 3) * (height + gap);
-      page.drawImage(assets.get(url), { x: mm(x), y: mm(y), width: mm(width), height: mm(height) });
+      drawCard(page, assets.get(url), x, y, width, height, degrees, fitImages);
       return { x, y };
     });
-    marks(page, slots, font, rgb);
+    marks(page, slots, font, rgb, { width, height, left, bottom });
   }
   return new Blob([await pdf.save()], { type: "application/pdf" });
 }

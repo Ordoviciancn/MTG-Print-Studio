@@ -25,11 +25,11 @@
         <div class="eyebrow"><span></span><span data-label="eyebrow"></span></div>
         <h1 data-label="title"></h1>
         <p data-label="subtitle"></p>
-        <div class="specs"><span>A4 / 210 × 297 mm</span><span>63 × 88 mm</span><span data-label="nine"></span></div>
+        <div class="specs"><span>A4 / 210 × 297 mm</span><span id="sizeSpec">63 × 88 mm</span><span data-label="nine"></span></div>
       </div>
       <div class="blueprint" aria-hidden="true">
         <div class="orbit"></div><div class="plate plate-rear"></div><div class="plate plate-mid"></div>
-        <div class="plate plate-front"><span>✦</span><b>63 × 88</b><small>MILLIMETRES</small></div>
+        <div class="plate plate-front"><span>✦</span><b id="sizePlate">63 × 88</b><small>MILLIMETRES</small></div>
         <span class="register top-left">+</span><span class="register bottom-right">+</span>
       </div>
     </section>
@@ -52,6 +52,12 @@
       <section class="panel review">
         <div class="step"><span>02</span><h2 data-label="review"></h2><span id="count" class="pill"></span></div>
         <p class="hint" data-label="reviewHelp"></p>
+        <div class="row utilities">
+          <button id="importImages" type="button" class="button ghost" data-label="importImages"></button>
+          <input id="imageFiles" type="file" hidden multiple accept=".png,.jpg,.jpeg,image/png,image/jpeg">
+        </div>
+        <p class="hint" data-label="importImagesHelp"></p>
+        <p id="imageNotice" class="notice" role="status"></p>
         <div id="cards" class="cards"></div>
       </section>
     </div>
@@ -63,6 +69,8 @@
         <p class="hint" data-label="actualSize"></p>
       </div>
       <div class="export-actions">
+        <label for="cardSize" data-label="cardSize"></label>
+        <select id="cardSize"></select>
         <label class="check"><input id="backs" type="checkbox" checked> <span data-label="backs"></span></label>
         <button id="pdf" class="button primary" disabled data-label="download"></button>
       </div>
