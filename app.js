@@ -1,10 +1,15 @@
 import { labels } from "./labels.js";
 import { cardPresets, cardSizes } from "./card-sizes.mjs";
+import { lookupTranslation, paintTranslation, prepareTranslation } from "./translation.mjs";
+import { loadFaceBlob, makeBrowserPdf } from "./browser-pdf.mjs";
 
 const get = (id) => document.getElementById(id);
 const deck = get("deck");
 const picker = get("picker");
 const sizeSelect = get("cardSize");
+const translationDialog = get("translationDialog");
+const translationText = get("translationText");
+const boxInputs = ["boxLeft", "boxTop", "boxWidth", "boxHeight"].map(get);
 const imageLimit = 500;
 const webEdition = location.hostname !== "127.0.0.1";
 const messages = {};
@@ -15,6 +20,7 @@ let importing = false;
 let exporting = false;
 let imageJob = false;
 let activeRow = null;
+let translationJob = null;
 let gallery = { token: 0, tab: "official", status: "", items: [] };
 
 function t(key, values = {}) {
@@ -100,7 +106,15 @@ async function api(path, payload) {
     const data = await response.json().catch(() => ({}));
     throw new Error(data.error || String(response.status));
   }
-  return path === "pdf" ? response.blob() : response.json();
+  return ["pdf", "image"].includes(path) ? response.blob() : response.json();
+}
+
+function originalFace(row, face) {
+  return { url: face.full, ppi: face.ppi ?? row.selected.dpi ?? 0, trim: face.trim };
+}
+
+function loadImage(face) {
+  return webEdition || face.url.startsWith("blob:") ? loadFaceBlob(face) : api("image", face);
 }
 
 function renderCards() {
@@ -117,13 +131,25 @@ function renderCards() {
     const selected = row.selected;
     const item = node("div", "card-row");
     const front = selected?.faces[0];
-    item.append(preview(front?.thumb, selected?.name || row.name, front?.full));
+    const overlay = row.translations?.[0];
+    item.append(preview(overlay?.url || front?.thumb, selected?.name || row.name, front?.full));
     const info = node("div", "card-info");
     info.append(node("b", "", row.quantity + " × " + row.name));
-    const details = selected ? description(selected) : t("missing");
+    const details = selected ? description(selected) +
+      (row.translations?.some(Boolean) ? " · " + t("translationApplied") : "") : t("missing");
+    const actions = node("div", "row card-actions");
+    selected?.faces.forEach((_, index) => {
+      const label = selected.faces.length === 1 ? t("translation")
+        : t(index ? "translationBack" : "translationFront");
+      const button = node("button", "button ghost", label);
+      button.type = "button";
+      button.setAttribute("aria-label", label + " " + row.name);
+      button.addEventListener("click", () => openTranslation(row, index));
+      actions.append(button);
+    });
     if (imageJob) {
       info.append(node("small", "", details));
-      item.append(info);
+      item.append(info, actions);
       container.append(item);
       continue;
     }
@@ -132,7 +158,8 @@ function renderCards() {
     button.type = "button";
     button.setAttribute("aria-label", t("choose") + " " + row.name);
     button.addEventListener("click", () => openPicker(row));
-    item.append(info, button);
+    actions.prepend(button);
+    item.append(info, actions);
     container.append(item);
   }
 }
@@ -164,7 +191,7 @@ function renderSummary() {
     : missingBack ? t("missingBack") : faces ? t("pages", { faces, pages: Math.ceil(faces / 9) }) : t("pdfPending");
   get("pdf").disabled = !faces || Boolean(missing) || stale || missingBack || importing || exporting;
   get("resolve").disabled = !deck.value.trim() || importing || exporting;
-  for (const button of get("cards").querySelectorAll("button")) button.disabled = exporting;
+  for (const button of get("cards").querySelectorAll("button")) button.disabled = importing || exporting;
 }
 
 async function resolveDeck() {
@@ -275,6 +302,10 @@ function renderGallery() {
 
 function releaseUpload(row) {
   if (row.selected?.source === "upload") URL.revokeObjectURL(row.selected.faces[0].full);
+  for (const overlay of row.translations || []) {
+    if (overlay) URL.revokeObjectURL(overlay.url);
+  }
+  row.translations = [];
 }
 
 function selectImage(row, card) {
@@ -317,6 +348,84 @@ function openPicker(row) {
   loadGallery(["mpc", "upload"].includes(row.selected?.source) ? "community" : "official");
 }
 
+function setTranslationStatus(key) {
+  message("translationStatus", key);
+}
+
+async function openTranslation(row, index) {
+  const saved = row.translations?.[index];
+  const face = row.selected.faces[index];
+  const hasStats = face.hasStats || row.official?.faces[index]?.hasStats;
+  const job = { row, index, version: 0, image: null };
+  translationJob?.image?.close();
+  translationJob = job;
+  get("translationPreview").width = 0;
+  get("translationCardName").textContent = row.name;
+  translationText.value = saved?.text || "";
+  translationText.disabled = true;
+  const box = saved?.box || [8.5, 61, 83, hasStats ? 27 : 30];
+  boxInputs.forEach((input, i) => { input.value = box[i]; });
+  get("saveTranslation").disabled = true;
+  get("removeTranslation").hidden = !saved;
+  translationDialog.showModal();
+  setTranslationStatus("translationLoading");
+  const card = row.selected.source === "scryfall" ? row.selected : row.official;
+  const [image, translation] = await Promise.allSettled([
+    loadImage(originalFace(row, face))
+      .then(blob => createImageBitmap(blob)),
+    saved ? "" : lookupTranslation(card, index),
+  ]);
+  if (translationJob !== job || !translationDialog.open) {
+    if (image.status === "fulfilled") image.value.close();
+    return;
+  }
+  if (image.status === "rejected") {
+    setTranslationStatus("translationImageError");
+    return;
+  }
+  job.image = image.value;
+  const text = translation.value || "";
+  if (!saved) translationText.value = text;
+  translationText.disabled = false;
+  job.status = saved ? "" : text ? "translationFound" : "translationMissing";
+  await repaintTranslation();
+}
+
+async function repaintTranslation() {
+  const job = translationJob;
+  if (!job?.image) return;
+  const version = ++job.version;
+  const text = translationText.value.trim();
+  const box = boxInputs.map(input => input.valueAsNumber);
+  get("saveTranslation").disabled = true;
+  const icons = text ? await prepareTranslation(text) : new Map();
+  if (translationJob !== job || job.version !== version || !translationDialog.open) return;
+  const fits = paintTranslation(get("translationPreview"), job.image, text, box, icons);
+  get("saveTranslation").disabled = !fits || !text;
+  setTranslationStatus(fits ? job.status : "translationFitError");
+}
+
+async function saveTranslation() {
+  const job = translationJob;
+  const version = job.version;
+  const button = get("saveTranslation");
+  button.disabled = true;
+  const blob = await new Promise(resolve => get("translationPreview").toBlob(resolve, "image/png"));
+  if (translationJob !== job || job.version !== version || !translationDialog.open) return;
+  if (!blob) {
+    setTranslationStatus("translationImageError");
+    return;
+  }
+  const translations = job.row.translations ||= [];
+  const previous = translations[job.index];
+  if (previous) URL.revokeObjectURL(previous.url);
+  translations[job.index] = { url: URL.createObjectURL(blob), text: translationText.value.trim(),
+    box: boxInputs.map(input => input.valueAsNumber) };
+  translationDialog.close();
+  renderCards();
+  renderSummary();
+}
+
 async function exportPdf() {
   exporting = true;
   renderSummary();
@@ -324,16 +433,15 @@ async function exportPdf() {
   try {
     const items = rows.map(row => ({
       quantity: row.quantity,
-      faces: row.selected.faces.slice(0, get("backs").checked ? 2 : 1).map(face => ({
-        url: face.full,
-        ppi: face.ppi ?? row.selected.dpi ?? 0,
-        trim: face.trim,
-      })),
+      faces: row.selected.faces.slice(0, get("backs").checked ? 2 : 1)
+        .map((face, index) => row.translations?.[index]
+          ? { url: row.translations[index].url } : originalFace(row, face)),
     }));
     const preset = sizeSelect.value;
     const size = cardPresets[preset];
-    const file = imageJob
-      ? await (await import("./browser-pdf.mjs")).makeBrowserPdf(items, size, true)
+    const browserExport = imageJob || items.some(row => row.faces.some(face => face.url.startsWith("blob:")));
+    const file = browserExport
+      ? await makeBrowserPdf(items, size, imageJob, loadImage)
       : await api("pdf", { rows: items, size });
     const url = URL.createObjectURL(file);
     const link = node("a");
@@ -352,6 +460,23 @@ async function exportPdf() {
 
 get("zh").addEventListener("click", () => chooseLanguage("zh"));
 get("en").addEventListener("click", () => chooseLanguage("en"));
+get("closeTranslation").addEventListener("click", () => translationDialog.close());
+translationDialog.addEventListener("close", () => {
+  if (translationDialog.open) return;
+  translationJob?.image?.close();
+  translationJob = null;
+});
+translationText.addEventListener("input", repaintTranslation);
+boxInputs.forEach(input => input.addEventListener("input", repaintTranslation));
+get("saveTranslation").addEventListener("click", saveTranslation);
+get("removeTranslation").addEventListener("click", () => {
+  const { row, index } = translationJob;
+  URL.revokeObjectURL(row.translations[index].url);
+  row.translations[index] = null;
+  translationDialog.close();
+  renderCards();
+  renderSummary();
+});
 get("resolve").addEventListener("click", resolveDeck);
 get("backs").addEventListener("change", renderSummary);
 sizeSelect.addEventListener("change", () => {

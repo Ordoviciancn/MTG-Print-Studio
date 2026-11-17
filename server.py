@@ -16,6 +16,7 @@ STATIC = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascri
           "/style.css": ("style.css", "text/css"), "/labels.js": ("labels.js", "text/javascript"),
           "/card-sizes.mjs": ("card-sizes.mjs", "text/javascript"),
           "/browser-pdf.mjs": ("browser-pdf.mjs", "text/javascript"),
+          "/translation.mjs": ("translation.mjs", "text/javascript"),
           "/vendor/pdf-lib.min.js": ("vendor/pdf-lib.min.js", "text/javascript")}
 IMAGE_WORKERS = 4
 
@@ -98,6 +99,11 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/api/pdf":
                 self.send(200, make_pdf(pdf_items(body), body.get("size", "standard")),
                           "application/pdf", "mtg-a4.pdf")
+            elif self.path == "/api/image":
+                _, image, _ = download_card(((body["url"], int(body.get("ppi", 0))), 1))
+                with io.BytesIO() as buffer:
+                    (image.convert("RGB") if image.mode == "CMYK" else image).save(buffer, "PNG")
+                    self.send(200, buffer.getvalue(), "image/png")
             else:
                 self.send_error(404)
         except SourceError as error:

@@ -122,3 +122,15 @@ dialog::backdrop { background: #132b25b0; }
   .export { grid-template-columns: 1fr; gap: 12px; }
   .footer { flex-direction: column; gap: 6px; }
 }
+.translation-dialog { width: min(800px, calc(100% - 24px)); }
+.card-actions { justify-content: end; max-width: 50%; }
+.translation-grid { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1fr); gap: 16px; margin-top: 12px; }
+#translationPreview { display: block; width: 100%; height: auto; align-self: start; }
+.translation-box { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; margin: 12px 0 0; border: 1px solid var(--line); border-radius: 8px; }
+.translation-box label { display: grid; gap: 3px; }
+.translation-box input { width: 100%; padding: 5px; border: 1px solid var(--line); border-radius: 5px; }
+@media (max-width: 600px) {
+  .translation-grid { grid-template-columns: 1fr; }
+  #translationPreview { max-width: 240px; margin-inline: auto; }
+  .card-actions { max-width: 42%; }
+}

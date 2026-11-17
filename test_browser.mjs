@@ -2,6 +2,19 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseBrowserDeck } from "./browser-deck.mjs";
 import { browserApi } from "./browser-api.mjs";
+import { lookupTranslation } from "./translation.mjs";
+
+test("translation lookup handles single-face indexes and prefers current wording", async t => {
+  const card = { set: "tsp", number: "269", oracle: "ruins" };
+  t.mock.method(globalThis, "fetch", async url => {
+    assert.equal(url, "https://mtgch.com/api/v1/card/tsp/269/");
+    return Response.json({ oracle_id: "ruins", face_index: -1,
+      atomic_translated_text: "{T}：加{C}。\\n规则文本", zhs_text: "旧版文本" });
+  });
+  assert.equal(await lookupTranslation(card), "{T}：加{C}。\n规则文本");
+  assert.equal(await lookupTranslation(card, 1), "");
+  assert.equal(await lookupTranslation({ ...card, oracle: "wrong" }), "");
+});
 
 test("static edition keeps printing identifiers and merges repeated sideboard entries", () => {
   const rows = parseBrowserDeck("About\nName Deck\n\nDeck\n1 Crystal Vein (PLST) MIR-325\n"

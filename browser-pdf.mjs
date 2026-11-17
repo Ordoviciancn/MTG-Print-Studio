@@ -20,7 +20,7 @@ function pdfLibrary() {
   return library;
 }
 
-async function download(face) {
+export async function loadFaceBlob(face) {
   const url = new URL(face.url);
   const localImage = url.protocol === "blob:" && url.origin === location.origin;
   if (!localImage && (url.protocol !== "https:" || url.hostname !== "cards.scryfall.io")) {
@@ -28,8 +28,8 @@ async function download(face) {
   }
   const response = await fetch(url, { signal: AbortSignal.timeout(45000) });
   if (!response.ok) throw new Error(`Card image HTTP ${response.status}`);
-  if (localImage && face.trim) return trimBleed(await response.blob());
-  return new Uint8Array(await response.arrayBuffer());
+  const blob = await response.blob();
+  return localImage && face.trim ? trimBleed(blob) : blob;
 }
 
 async function trimBleed(blob) {
@@ -46,7 +46,7 @@ async function trimBleed(blob) {
       0, 0, canvas.width, canvas.height);
     const trimmed = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
     if (!trimmed) throw new Error("Unable to trim the card image");
-    return new Uint8Array(await trimmed.arrayBuffer());
+    return trimmed;
   } finally {
     image.close();
   }
@@ -93,7 +93,7 @@ function drawCard(page, image, x, y, width, height, rotate, fit) {
     : { x: mm(left), y: mm(bottom), width: mm(imageWidth), height: mm(imageHeight) });
 }
 
-export async function makeBrowserPdf(rows, size = "standard", fitImages = false) {
+export async function makeBrowserPdf(rows, size = "standard", fitImages = false, loadImage = loadFaceBlob) {
   if (!Object.hasOwn(cardSizes, size)) throw new Error("Unknown card size");
   const { width, height } = cardSizes[size];
   const left = (210 - 3 * width - 2 * gap) / 2;
@@ -114,7 +114,8 @@ export async function makeBrowserPdf(rows, size = "standard", fitImages = false)
   const unique = [...assets.values()];
   for (let start = 0; start < unique.length; start += 4) {
     const batch = unique.slice(start, start + 4);
-    const data = await Promise.all(batch.map(download));
+    const data = await Promise.all(batch.map(async face =>
+      new Uint8Array(await (await loadImage(face)).arrayBuffer())));
     for (const [index, bytes] of data.entries()) {
       const image = bytes[0] === 0xff && bytes[1] === 0xd8
         ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes);

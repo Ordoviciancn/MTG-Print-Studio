@@ -24,10 +24,12 @@ async function getJSON(path, payload) {
 }
 
 function facesOf(card) {
-  const images = card.image_uris ? [card.image_uris] : (card.card_faces || []).map(face => face.image_uris);
-  return images.filter(uri => uri && (uri.png || uri.large || uri.normal)).map(uri => ({
-    full: uri.png || uri.large || uri.normal, thumb: uri.normal || uri.large || uri.png,
-  }));
+  const faces = card.image_uris ? [card] : (card.card_faces || []);
+  return faces.flatMap(({ image_uris: uri, power, defense }) =>
+    uri && (uri.png || uri.large || uri.normal) ? [{
+      full: uri.png || uri.large || uri.normal, thumb: uri.normal || uri.large || uri.png,
+      ...(power != null || defense != null ? { hasStats: true } : {}),
+    }] : []);
 }
 
 function eligible(card) {

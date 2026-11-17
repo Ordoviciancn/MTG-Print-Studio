@@ -85,11 +85,17 @@ def json_request(url, payload=None):
 
 
 def images(card):
-    sides = [card["image_uris"]] if card.get("image_uris") else [
-        face.get("image_uris", {}) for face in card.get("card_faces", [])]
-    return [{"full": side.get("png") or side.get("large") or side.get("normal"),
-             "thumb": side.get("normal") or side.get("large") or side.get("png")}
-            for side in sides if side.get("png") or side.get("large") or side.get("normal")]
+    faces = [card] if card.get("image_uris") else card.get("card_faces", [])
+    images = []
+    for face in faces:
+        uri = face.get("image_uris") or {}
+        full = uri.get("png") or uri.get("large") or uri.get("normal")
+        if full:
+            item = {"full": full, "thumb": uri.get("normal") or uri.get("large") or full}
+            if face.get("power") is not None or face.get("defense") is not None:
+                item["hasStats"] = True
+            images.append(item)
+    return images
 
 
 def pack(card):

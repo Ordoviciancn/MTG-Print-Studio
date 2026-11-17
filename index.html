@@ -7,7 +7,7 @@
   <title>MTG Print Studio</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&family=Noto+Serif+SC:wght@700;800&family=Playfair+Display:wght@600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&family=Noto+Serif+SC:wght@400;700;800&family=Playfair+Display:wght@600;700&display=swap">
   <link rel="stylesheet" href="./style.css">
   <script src="./app.js" type="module"></script>
 </head>
@@ -98,6 +98,32 @@
       </div>
     </div>
     <div id="choices" class="choices"></div>
+  </dialog>
+  <dialog id="translationDialog" class="translation-dialog" aria-labelledby="translationHeading">
+    <div class="picker-header">
+      <div><h2 id="translationHeading" data-label="translation"></h2><p id="translationCardName"></p></div>
+      <button id="closeTranslation" class="button ghost close" type="button" data-aria="close">×</button>
+    </div>
+    <div class="translation-grid">
+      <canvas id="translationPreview" role="img" data-aria="translationPreview"></canvas>
+      <div>
+        <p class="hint" data-label="translationHelp"></p>
+        <label for="translationText" data-label="translationText"></label>
+        <textarea id="translationText" spellcheck="false" maxlength="1800"></textarea>
+        <p id="translationStatus" class="notice" role="status"></p>
+        <fieldset class="translation-box">
+          <legend data-label="translationBox"></legend>
+          <label><span data-label="boxLeft"></span><input id="boxLeft" type="number" min="0" max="99" step="0.5" value="8.5"></label>
+          <label><span data-label="boxTop"></span><input id="boxTop" type="number" min="0" max="99" step="0.5" value="61"></label>
+          <label><span data-label="boxWidth"></span><input id="boxWidth" type="number" min="1" max="100" step="0.5" value="83"></label>
+          <label><span data-label="boxHeight"></span><input id="boxHeight" type="number" min="1" max="100" step="0.5" value="30"></label>
+        </fieldset>
+        <div class="row utilities">
+          <button id="saveTranslation" class="button primary" type="button" data-label="saveTranslation"></button>
+          <button id="removeTranslation" class="button ghost" type="button" data-label="removeTranslation"></button>
+        </div>
+      </div>
+    </div>
   </dialog>
 </body>
 </html>
